@@ -1,0 +1,12 @@
+pandas
+   numpy
+   scikit-learn
+   sentence-transformers
+   matplotlib
+   plotly
+   streamlit
+   jupyter
+   pyarrow
+   # 进阶再解注释：
+   # bertopic
+   # faiss-cpu
