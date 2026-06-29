@@ -18,6 +18,16 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from backend.pipeline import build_report  # noqa: E402
 
+try:
+    import resource  # Unix-only — lets us log peak RSS per pipeline step to pin down OOM causes
+
+    def _peak_rss_mb() -> float | None:
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+except ImportError:  # Windows (local dev) has no `resource` module
+
+    def _peak_rss_mb() -> float | None:
+        return None
+
 app = FastAPI(title="AI Usage Report")
 
 # FRONTEND_ORIGIN holds the deployed frontend's URL in production (comma-separated if there's more than one).
@@ -53,6 +63,9 @@ async def health() -> dict:
 
 def _run_job(job_id: str, export_paths: list[Path], lang: str, tmp_dir: str) -> None:
     def on_progress(step: str) -> None:
+        rss = _peak_rss_mb()
+        if rss is not None:
+            print(f"[{job_id[:8]}] {step} — peak RSS so far: {rss:.0f} MB", flush=True)
         _jobs[job_id]["step"] = step
 
     try:
