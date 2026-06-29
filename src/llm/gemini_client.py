@@ -20,10 +20,15 @@ def get_client() -> genai.Client:
     return _client
 
 
+def _is_rate_limit(exc: genai_errors.ClientError) -> bool:
+    return getattr(exc, "code", None) == 429
+
+
 def _generate_with_retry(model: str, prompt: str, max_retries: int = 3) -> str:
     """Gemini occasionally returns a transient 503 ("high demand") — retry a few times with
     backoff instead of letting one flaky call kill an entire report build that may have already
-    spent a minute on embedding/clustering."""
+    spent a minute on embedding/clustering. Also retries 429s (rate/quota limit) with a longer
+    wait, since TPM/RPM limits reset on a rolling ~60s window rather than clearing in a few seconds."""
     for attempt in range(max_retries):
         try:
             response = get_client().models.generate_content(model=model, contents=prompt)
@@ -32,6 +37,10 @@ def _generate_with_retry(model: str, prompt: str, max_retries: int = 3) -> str:
             if attempt == max_retries - 1:
                 raise
             time.sleep(2**attempt)
+        except genai_errors.ClientError as exc:
+            if not _is_rate_limit(exc) or attempt == max_retries - 1:
+                raise
+            time.sleep(30 * (attempt + 1))
     raise RuntimeError("unreachable")  # loop always returns or raises
 
 
@@ -77,6 +86,10 @@ def embed_texts(
             if attempt == max_retries - 1:
                 raise
             time.sleep(2**attempt)
+        except genai_errors.ClientError as exc:
+            if not _is_rate_limit(exc) or attempt == max_retries - 1:
+                raise
+            time.sleep(30 * (attempt + 1))
     raise RuntimeError("unreachable")  # loop always returns or raises
 
 
