@@ -10,5 +10,5 @@ EMBEDDING_DIR = DATA_DIR / "embeddings"
 for _d in (RAW_DIR, PROCESSED_DIR, EMBEDDING_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
-EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+EMBEDDING_MODEL = "gemini-embedding-001"
 RANDOM_SEED = 42

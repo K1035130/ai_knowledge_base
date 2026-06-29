@@ -58,6 +58,28 @@ def label_cluster(keywords: list[str], lang: str = "zh", model: str = "gemini-2.
     return _generate_with_retry(model, prompt)
 
 
+def embed_texts(
+    texts: list[str],
+    model: str = "gemini-embedding-001",
+    output_dimensionality: int = 768,
+    max_retries: int = 3,
+) -> list[list[float]]:
+    """Batch-embeds texts via Gemini's embedding API (one HTTP call per batch, already-batched by caller)."""
+    for attempt in range(max_retries):
+        try:
+            response = get_client().models.embed_content(
+                model=model,
+                contents=texts,
+                config={"output_dimensionality": output_dimensionality},
+            )
+            return [e.values for e in response.embeddings]
+        except genai_errors.ServerError:
+            if attempt == max_retries - 1:
+                raise
+            time.sleep(2**attempt)
+    raise RuntimeError("unreachable")  # loop always returns or raises
+
+
 def summarize_highlight(conversation_text: str, lang: str = "zh", model: str = "gemini-2.5-flash") -> str:
     """One-line, narrative-style summary of a single real conversation, for the annual-report highlight reel."""
     if lang == "en":
