@@ -3,6 +3,7 @@
 Run with: uvicorn backend.main:app --reload --port 8000
 """
 
+import os
 import shutil
 import sys
 import tempfile
@@ -18,9 +19,12 @@ from backend.pipeline import build_report  # noqa: E402
 
 app = FastAPI(title="AI Usage Report")
 
+# FRONTEND_ORIGIN holds the deployed frontend's URL in production (comma-separated if there's more than one).
+# localhost:5173 always stays allowed so local dev keeps working unmodified.
+_extra_origins = [o.strip() for o in os.environ.get("FRONTEND_ORIGIN", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", *_extra_origins],
     allow_methods=["*"],
     allow_headers=["*"],
 )
