@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -31,6 +32,18 @@ app.add_middleware(
 
 # In-memory job store. Single-user local app — no Redis/Celery needed.
 _jobs: dict[str, dict] = {}
+
+# Completed jobs (with the full report payload) were never evicted, so memory usage grew with
+# every report ever generated since the process started — swept opportunistically on each new
+# upload instead of running a background timer, since this app only ever sees occasional traffic.
+_JOB_TTL_SECONDS = 30 * 60
+
+
+def _evict_stale_jobs() -> None:
+    cutoff = time.monotonic() - _JOB_TTL_SECONDS
+    stale_ids = [job_id for job_id, job in _jobs.items() if job["created_at"] < cutoff]
+    for job_id in stale_ids:
+        del _jobs[job_id]
 
 
 @app.get("/")
@@ -64,6 +77,8 @@ async def create_report(
     if lang not in ("zh", "en"):
         lang = "zh"
 
+    _evict_stale_jobs()
+
     tmp_dir = tempfile.mkdtemp(prefix="ai_usage_report_")
     export_paths = []
     for file in files:
@@ -73,7 +88,13 @@ async def create_report(
 
     job_id = str(uuid.uuid4())
     step_queued = "排队中" if lang == "zh" else "Queued"
-    _jobs[job_id] = {"status": "running", "step": step_queued, "result": None, "error": None}
+    _jobs[job_id] = {
+        "status": "running",
+        "step": step_queued,
+        "result": None,
+        "error": None,
+        "created_at": time.monotonic(),
+    }
     background_tasks.add_task(_run_job, job_id, export_paths, lang, tmp_dir)
 
     return {"job_id": job_id}
