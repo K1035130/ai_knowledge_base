@@ -11,6 +11,10 @@ import { useLanguage } from "./i18n/LanguageContext";
 
 type Phase = "idle" | "running" | "done" | "error";
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function App() {
   const { t, lang } = useLanguage();
   const [phase, setPhase] = useState<Phase>("idle");
@@ -48,7 +52,7 @@ function App() {
             if (pollRef.current) window.clearInterval(pollRef.current);
           }
         } catch (err) {
-          setError(String(err));
+          setError(errorMessage(err));
           setPhase("error");
           if (pollRef.current) window.clearInterval(pollRef.current);
         }

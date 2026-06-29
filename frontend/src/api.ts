@@ -57,7 +57,14 @@ export async function uploadExports(files: File[], lang: "zh" | "en"): Promise<s
   form.append("lang", lang);
   const res = await fetch(`${API_BASE}/api/reports`, { method: "POST", body: form });
   if (!res.ok) {
-    throw new Error(`Upload failed: ${res.status}`);
+    let detail = `Upload failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (typeof body?.detail === "string") detail = body.detail;
+    } catch {
+      // response wasn't JSON — fall back to the generic message
+    }
+    throw new Error(detail);
   }
   const data = await res.json();
   return data.job_id as string;

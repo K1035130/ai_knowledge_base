@@ -17,7 +17,15 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadF
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from backend.pipeline import build_report  # noqa: E402
+from src.parsing.chatgpt_parser import parse_exports  # noqa: E402
 from src.utils.memlog import log_rss  # noqa: E402
+
+# Render's free tier caps the backend at 512MB RAM. Past this many conversations, the pipeline's
+# memory use (embedding + KMeans + jieba's dictionary load + TF-IDF) has reliably tipped over that
+# limit mid-job, crashing the whole report instead of finishing it — so we reject oversized uploads
+# up front rather than letting them fail expensively partway through. 448 conversations were
+# confirmed to work in testing; kept a safety margin below that rather than capping right at it.
+MAX_CONVERSATIONS = 350
 
 app = FastAPI(title="AI Usage Report")
 
@@ -87,6 +95,24 @@ async def create_report(
         dest = Path(tmp_dir) / file.filename
         dest.write_bytes(await file.read())
         export_paths.append(dest)
+
+    conversation_count = parse_exports(export_paths)["conversation_id"].nunique()
+    if conversation_count > MAX_CONVERSATIONS:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        if lang == "en":
+            detail = (
+                f"This upload has {conversation_count} conversations, more than this service can "
+                f"reliably process right now (limit: {MAX_CONVERSATIONS}). Please upload fewer files "
+                "and try again — if your export is split into numbered files, prefer keeping the "
+                "higher-numbered ones."
+            )
+        else:
+            detail = (
+                f"这次上传包含 {conversation_count} 条对话，超出了当前服务能稳定处理的上限"
+                f"（{MAX_CONVERSATIONS} 条）。请减少上传的文件数量后重试，"
+                "如果导出文件是带编号的多个文件，尽量保留编号更大的文件。"
+            )
+        raise HTTPException(400, detail)
 
     job_id = str(uuid.uuid4())
     step_queued = "排队中" if lang == "zh" else "Queued"

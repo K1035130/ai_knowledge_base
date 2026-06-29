@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import html2canvas from "html2canvas";
+import { domToPng } from "modern-screenshot";
 import type { ReportResult } from "../api";
 import { useLanguage } from "../i18n/LanguageContext";
 import OverviewCards from "./OverviewCards";
@@ -93,6 +93,7 @@ export default function ReportView({ report, onReupload }: Props) {
   const { t } = useLanguage();
   const [page, setPage] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const pages = [
@@ -143,6 +144,7 @@ export default function ReportView({ report, onReupload }: Props) {
   async function handleExport() {
     if (isExporting) return;
     setIsExporting(true);
+    setExportError(null);
     const originalPage = page;
     const captures: { title: string; dataUrl: string }[] = [];
     try {
@@ -152,13 +154,16 @@ export default function ReportView({ report, onReupload }: Props) {
         // give the page's mount animation (fade-up/pop-in) and any chart layout time to settle
         await new Promise((resolve) => setTimeout(resolve, 1200));
         if (!contentRef.current) continue;
-        const canvas = await html2canvas(contentRef.current, {
+        const dataUrl = await domToPng(contentRef.current, {
           backgroundColor: "#13101f",
           scale: 2,
         });
-        captures.push({ title: pages[i].title, dataUrl: canvas.toDataURL("image/png") });
+        captures.push({ title: pages[i].title, dataUrl });
       }
       downloadHtml("ai-usage-report.html", buildStandaloneHtml(t.title, captures));
+    } catch (err) {
+      console.error("HTML export failed:", err);
+      setExportError(t.export.error);
     } finally {
       setPage(originalPage);
       setIsExporting(false);
@@ -186,6 +191,11 @@ export default function ReportView({ report, onReupload }: Props) {
         </svg>
         {isExporting ? t.export.generating : t.export.button}
       </button>
+      {exportError && (
+        <p className="fixed top-14 right-4 z-40 max-w-[200px] text-right text-xs text-red-400 sm:top-16 sm:right-6">
+          {exportError}
+        </p>
+      )}
 
       <h2 key={`title-${page}`} className="fade-up-item text-xl font-semibold text-white/90">
         {pages[page].title}

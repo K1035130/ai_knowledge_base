@@ -43,6 +43,7 @@ export const translations = {
     export: {
       button: "导出 HTML",
       generating: "正在生成…",
+      error: "导出失败，请重试",
     },
     overview: {
       total_conversations: "对话总数",
@@ -115,6 +116,7 @@ export const translations = {
     export: {
       button: "Export HTML",
       generating: "Generating…",
+      error: "Export failed, please try again",
     },
     overview: {
       total_conversations: "Total conversations",
