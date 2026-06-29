@@ -33,6 +33,11 @@ app.add_middleware(
 _jobs: dict[str, dict] = {}
 
 
+@app.get("/")
+async def health() -> dict:
+    return {"status": "ok"}
+
+
 def _run_job(job_id: str, export_paths: list[Path], lang: str, tmp_dir: str) -> None:
     def on_progress(step: str) -> None:
         _jobs[job_id]["step"] = step
