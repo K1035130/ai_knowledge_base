@@ -17,6 +17,16 @@ def _extract_text(message: dict) -> str:
     return "\n".join(texts).strip()
 
 
+def _build_children_map(mapping: dict) -> dict[str, list[str]]:
+    """ChatGPT's export nodes don't carry a `children` field, only `parent` — derive siblings by scanning."""
+    children: dict[str, list[str]] = {}
+    for node_id, node in mapping.items():
+        parent_id = node.get("parent")
+        if parent_id is not None:
+            children.setdefault(parent_id, []).append(node_id)
+    return children
+
+
 def _walk_branch(mapping: dict, leaf_id: str) -> list[dict]:
     """Follow parent pointers from current_node back to the root, then reverse to chronological order."""
     nodes = []
@@ -36,6 +46,7 @@ def parse_conversation(conversation: dict) -> list[dict]:
     mapping = conversation.get("mapping", {})
     leaf_id = conversation.get("current_node")
     nodes = _walk_branch(mapping, leaf_id)
+    children_map = _build_children_map(mapping)
 
     rows = []
     turn = 0
@@ -49,6 +60,9 @@ def parse_conversation(conversation: dict) -> list[dict]:
         text = _extract_text(message)
         if not text:
             continue
+        # siblings under the same parent are abandoned edits (role=user) or regenerations (role=assistant)
+        siblings = children_map.get(node.get("parent"), [])
+        edit_count = max(len(siblings) - 1, 0)
         rows.append(
             {
                 "conversation_id": conversation_id,
@@ -56,6 +70,7 @@ def parse_conversation(conversation: dict) -> list[dict]:
                 "role": role,
                 "timestamp": message.get("create_time"),
                 "text": text,
+                "edit_count": edit_count,
             }
         )
         turn += 1
@@ -70,14 +85,28 @@ def parse_export(export_path: Path) -> pd.DataFrame:
     for conv in conversations:
         rows.extend(parse_conversation(conv))
 
-    df = pd.DataFrame(rows, columns=["conversation_id", "turn", "role", "timestamp", "text"])
+    df = pd.DataFrame(rows, columns=["conversation_id", "turn", "role", "timestamp", "text", "edit_count"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", errors="coerce")
     return df
 
 
+def parse_exports(export_paths: list[Path]) -> pd.DataFrame:
+    """Parse multiple export files and merge them, dropping rows duplicated across overlapping exports."""
+    frames = [parse_export(path) for path in export_paths]
+    df = pd.concat(frames, ignore_index=True)
+    return df.drop_duplicates(subset=["conversation_id", "turn", "role", "timestamp", "text"])
+
+
 if __name__ == "__main__":
-    export_file = Path(sys.argv[1]) if len(sys.argv) > 1 else RAW_DIR / "conversations.json"
-    df = parse_export(export_file)
+    if len(sys.argv) > 1:
+        export_files = [Path(p) for p in sys.argv[1:]]
+    else:
+        export_files = sorted(RAW_DIR.glob("*.json"))
+
+    df = parse_exports(export_files)
     out_path = PROCESSED_DIR / "conversations.parquet"
     df.to_parquet(out_path, index=False)
-    print(f"Parsed {len(df)} messages from {df['conversation_id'].nunique()} conversations -> {out_path}")
+    print(
+        f"Parsed {len(df)} messages from {df['conversation_id'].nunique()} conversations "
+        f"across {len(export_files)} files -> {out_path}"
+    )

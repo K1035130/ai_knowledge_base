@@ -7,6 +7,16 @@ pandas
    streamlit
    jupyter
    pyarrow
+   jieba
+   stopwordsiso
+   langdetect
+   tiktoken
+   google-genai
+   python-dotenv
+   pytest
+   fastapi
+   uvicorn
+   python-multipart
    # 进阶再解注释：
    # bertopic
    # faiss-cpu

@@ -1,0 +1,83 @@
+@import url("https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&family=Ma+Shan+Zheng&display=swap");
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+.font-en-script {
+  font-family: "Dancing Script", cursive;
+}
+
+.font-zh-script {
+  font-family: "Ma Shan Zheng", cursive;
+}
+
+body {
+  margin: 0;
+  background-color: #0b0b12;
+  color: #f1f1f4;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@keyframes float-up {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.55;
+  }
+  88% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-115vh) scale(1.2);
+    opacity: 0;
+  }
+}
+
+.bubble {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(36px);
+  animation-name: float-up;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-up-item {
+  animation: fade-up 0.5s ease both;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pop-in-item {
+  animation: pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
