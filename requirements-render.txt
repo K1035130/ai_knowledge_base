@@ -1,0 +1,17 @@
+# Minimal dependency set for the deployed FastAPI backend (Render).
+# requirements.txt (the full set, including torch/sentence-transformers/jupyter/streamlit/
+# matplotlib/plotly/pyarrow) stays for local notebook/Streamlit-prototype work — none of those
+# are imported anywhere on the backend/main.py -> backend/pipeline.py -> src/* import path, so
+# installing them on Render only costs build time and disk, never runtime memory.
+fastapi
+uvicorn
+python-multipart
+pandas
+numpy
+scikit-learn
+jieba
+stopwordsiso
+tiktoken
+langdetect
+google-genai
+python-dotenv

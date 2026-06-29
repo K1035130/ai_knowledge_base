@@ -35,6 +35,7 @@ ai_knowledge_base/
 ├── notebooks/                  # interactive EDA / exploration
 ├── render.yaml                 # Render Blueprint: backend web service + frontend static site
 ├── runtime.txt                 # pins the Python version Render builds with
+├── requirements-render.txt     # minimal deps actually imported by backend/ — what Render installs
 └── tests/
 ```
 
@@ -79,7 +80,7 @@ This directly affects clustering quality (Stage 2) and report relevance, so don'
 
 The app is deployed on Render as two services — see `render.yaml`:
 
-- **Backend** (Web Service): `pip install -r requirements.txt`, started with `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`. Needs `GEMINI_API_KEY` set in the dashboard, and `FRONTEND_ORIGIN` once the frontend's URL is known (CORS allowlist). `runtime.txt` pins the Python version.
+- **Backend** (Web Service): `pip install -r requirements-render.txt` (a minimal subset of `requirements.txt` — only what the backend's actual import chain needs; torch/sentence-transformers/jupyter/streamlit/matplotlib/plotly are only for local notebook work and just slow the build down if installed on Render), started with `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`. Needs `GEMINI_API_KEY` set in the dashboard, and `FRONTEND_ORIGIN` once the frontend's URL is known (CORS allowlist). `runtime.txt` pins the Python version.
 - **Frontend** (Static Site): `npm install && npm run build` in `frontend/`, publishes `frontend/dist`. Needs `VITE_API_BASE_URL` set to the backend's URL — this is baked in at build time, so changing it requires a redeploy, not just an env var update.
 
 Both currently run on Render's free tier, which spins down after 15 minutes idle (cold start on the next request) and caps each service at 512MB RAM — the reason the embedding step runs through an API instead of a local model.
@@ -134,6 +135,7 @@ ai_knowledge_base/
 ├── notebooks/                  # 交互式 EDA / 探索分析
 ├── render.yaml                 # Render 部署蓝图：后端 Web Service + 前端 Static Site
 ├── runtime.txt                 # 固定 Render 构建用的 Python 版本
+├── requirements-render.txt     # 后端真实会用到的精简依赖——Render 构建时装的就是这份
 └── tests/
 ```
 
@@ -178,7 +180,7 @@ npm run dev
 
 应用部署在 Render 上，分成两个服务——配置见 `render.yaml`：
 
-- **后端**（Web Service）：`pip install -r requirements.txt`，用 `uvicorn backend.main:app --host 0.0.0.0 --port $PORT` 启动。需要在 Render 面板里手动填 `GEMINI_API_KEY`，等前端服务的网址确定后还要填 `FRONTEND_ORIGIN`（CORS 白名单）。`runtime.txt` 固定了 Python 版本。
+- **后端**（Web Service）：`pip install -r requirements-render.txt`（是 `requirements.txt` 的精简子集，只包含后端真实 import 链路用到的依赖——torch/sentence-transformers/jupyter/streamlit/matplotlib/plotly 只在本地 notebook 里用，装到 Render 上纯粹拖慢构建速度），用 `uvicorn backend.main:app --host 0.0.0.0 --port $PORT` 启动。需要在 Render 面板里手动填 `GEMINI_API_KEY`，等前端服务的网址确定后还要填 `FRONTEND_ORIGIN`（CORS 白名单）。`runtime.txt` 固定了 Python 版本。
 - **前端**（Static Site）：在 `frontend/` 下跑 `npm install && npm run build`，发布 `frontend/dist`。需要填 `VITE_API_BASE_URL` 指向后端网址——这个值是 build 时打包进静态文件的，改了之后必须重新部署才会生效，光改环境变量本身不够。
 
 两个服务目前都跑在 Render 免费版上：闲置15分钟后会休眠（下次请求要等冷启动），且每个服务内存上限是512MB——这也是为什么 embedding 这一步改成调 API 而不是跑本地模型的原因。
