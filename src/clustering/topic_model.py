@@ -12,6 +12,7 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 from config import RANDOM_SEED  # noqa: E402
+from src.utils.memlog import log_rss  # noqa: E402
 
 # Only "text" (a pure LaTeX-rendering artifact) is noise — math symbols like
 # frac/cdot/sin/theta are kept since they're a real signal that a cluster is math-related.
@@ -53,10 +54,13 @@ def kmeans_cluster(embeddings: np.ndarray, k: int) -> np.ndarray:
 
 
 def top_terms_per_cluster(texts: pd.Series, labels: np.ndarray, top_n: int = 10) -> dict[int, list[str]]:
+    log_rss("before jieba tokenization (jieba's dict loads lazily on first call)")
     tokenized = [" ".join(jieba.cut(text)) for text in texts]
+    log_rss("after jieba tokenization")
     vectorizer = TfidfVectorizer(max_features=2000, stop_words=STOPWORDS)
     tfidf = vectorizer.fit_transform(tokenized)
     terms = vectorizer.get_feature_names_out()
+    log_rss("after TF-IDF vectorization")
 
     result = {}
     for cluster_id in sorted(set(labels)):

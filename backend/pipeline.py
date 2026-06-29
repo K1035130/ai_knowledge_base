@@ -4,6 +4,7 @@ Mirrors the logic validated interactively in notebooks/01_eda.ipynb, but calls t
 src/ modules instead of duplicating the logic here.
 """
 
+import gc
 import sys
 from pathlib import Path
 from typing import Callable
@@ -18,6 +19,7 @@ from src.clustering import topic_model as tm  # noqa: E402
 from src.embedding import encoder  # noqa: E402
 from src.llm.gemini_client import label_cluster, summarize_highlight  # noqa: E402
 from src.parsing.chatgpt_parser import parse_exports  # noqa: E402
+from src.utils.memlog import log_rss  # noqa: E402
 
 ProgressCallback = Callable[[str], None]
 
@@ -61,9 +63,13 @@ def build_report(
     on_progress(steps["parse"])
     df = parse_exports(export_paths)
     df = up.add_time_features(df)
+    log_rss("after parsing")
 
     on_progress(steps["clean"])
     clean_df = up.clean_timestamps(df)
+    del df  # clean_timestamps returns a new frame; the original is a near-duplicate we no longer need
+    gc.collect()
+    log_rss("after cleaning + freeing raw df")
 
     on_progress(steps["profile"])
     session = up.session_duration(clean_df)
@@ -85,18 +91,22 @@ def build_report(
     }
     language_ratio = _series_to_native(up.language_ratio(clean_df), value_type=float)
     rewrite_rate = up.rewrite_rate_stats(clean_df)
+    log_rss("after usage profile stats")
 
     on_progress(steps["embed"])
     conv_docs = clean_df.groupby("conversation_id")["text"].apply(lambda t: " ".join(t)).reset_index()
     conv_docs.columns = ["conversation_id", "doc"]
     embeddings = encoder.encode_texts(conv_docs["doc"].tolist())
+    log_rss("after embedding")
 
     on_progress(steps["cluster"])
     inertias = tm.find_best_k(embeddings)
     best_k = tm.select_k_kneedle(inertias)
     labels = tm.kmeans_cluster(embeddings, best_k)
     conv_docs["cluster"] = labels
+    log_rss("after kmeans, before c-TF-IDF")
     top_terms = tm.top_terms_per_cluster(conv_docs["doc"], labels)
+    log_rss("after c-TF-IDF keyword extraction")
 
     on_progress(steps["label"])
     cluster_info = []
