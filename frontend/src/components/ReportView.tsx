@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import html2canvas from "html2canvas";
 import type { ReportResult } from "../api";
 import { useLanguage } from "../i18n/LanguageContext";
 import OverviewCards from "./OverviewCards";
@@ -10,6 +11,50 @@ import RewriteAndLanguage from "./RewriteAndLanguage";
 interface Props {
   report: ReportResult;
   onReupload: () => void;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function buildStandaloneHtml(title: string, sections: { title: string; dataUrl: string }[]): string {
+  const sectionsHtml = sections
+    .map(
+      (s) => `
+    <section style="margin-bottom:48px;">
+      <h2 style="font-size:20px;font-weight:600;color:#f1f1f4;margin-bottom:16px;text-align:center;">${escapeHtml(s.title)}</h2>
+      <img src="${s.dataUrl}" style="display:block;max-width:100%;margin:0 auto;border-radius:16px;" />
+    </section>`,
+    )
+    .join("\n");
+
+  return `<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<title>${escapeHtml(title)}</title>
+<style>
+  body { margin: 0; padding: 40px 16px; background: linear-gradient(to top, rgba(124,58,237,0.25), #1a1430, #0b0b12); color: #f1f1f4; font-family: system-ui, "Segoe UI", Roboto, sans-serif; }
+  h1 { text-align: center; font-size: 28px; font-weight: 600; margin-bottom: 40px; }
+  footer { text-align: center; color: rgba(255,255,255,0.4); font-size: 12px; margin-top: 40px; }
+</style>
+</head>
+<body>
+  <h1>${escapeHtml(title)}</h1>
+  ${sectionsHtml}
+  <footer>${escapeHtml(new Date().toLocaleDateString())}</footer>
+</body>
+</html>`;
+}
+
+function downloadHtml(filename: string, html: string): void {
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function ArrowButton({
@@ -47,6 +92,8 @@ function ArrowButton({
 export default function ReportView({ report, onReupload }: Props) {
   const { t } = useLanguage();
   const [page, setPage] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const pages = [
     { title: t.sections.overview, content: <OverviewCards overview={report.overview} /> },
@@ -85,23 +132,66 @@ export default function ReportView({ report, onReupload }: Props) {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (isExporting) return;
       if (e.key === "ArrowLeft") goPrev();
       if (e.key === "ArrowRight") goNext();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [goPrev, goNext]);
+  }, [goPrev, goNext, isExporting]);
+
+  async function handleExport() {
+    if (isExporting) return;
+    setIsExporting(true);
+    const originalPage = page;
+    const captures: { title: string; dataUrl: string }[] = [];
+    try {
+      // skip the last "ending" page — it's just the reupload button, not report content
+      for (let i = 0; i < pages.length - 1; i++) {
+        setPage(i);
+        // give the page's mount animation (fade-up/pop-in) and any chart layout time to settle
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        if (!contentRef.current) continue;
+        const canvas = await html2canvas(contentRef.current, {
+          backgroundColor: "#13101f",
+          scale: 2,
+        });
+        captures.push({ title: pages[i].title, dataUrl: canvas.toDataURL("image/png") });
+      }
+      downloadHtml("ai-usage-report.html", buildStandaloneHtml(t.title, captures));
+    } finally {
+      setPage(originalPage);
+      setIsExporting(false);
+    }
+  }
 
   return (
     <div className="flex w-full flex-1 flex-col items-center justify-center gap-8 py-6">
-      <ArrowButton direction="left" onClick={goPrev} disabled={page === 0} label={t.nav.prev} />
-      <ArrowButton direction="right" onClick={goNext} disabled={page === pages.length - 1} label={t.nav.next} />
+      <ArrowButton direction="left" onClick={goPrev} disabled={page === 0 || isExporting} label={t.nav.prev} />
+      <ArrowButton
+        direction="right"
+        onClick={goNext}
+        disabled={page === pages.length - 1 || isExporting}
+        label={t.nav.next}
+      />
+
+      <button
+        type="button"
+        onClick={handleExport}
+        disabled={isExporting}
+        className="fixed top-4 right-4 z-40 flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs text-white/80 backdrop-blur-md transition hover:bg-white/20 disabled:opacity-60 sm:top-6 sm:right-6"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {isExporting ? t.export.generating : t.export.button}
+      </button>
 
       <h2 key={`title-${page}`} className="fade-up-item text-xl font-semibold text-white/90">
         {pages[page].title}
       </h2>
 
-      <div key={`content-${page}`} className="flex w-full flex-col items-center">
+      <div ref={contentRef} key={`content-${page}`} className="flex w-full flex-col items-center">
         {pages[page].content}
       </div>
 
@@ -111,8 +201,9 @@ export default function ReportView({ report, onReupload }: Props) {
             key={i}
             type="button"
             onClick={() => setPage(i)}
+            disabled={isExporting}
             aria-label={`page ${i + 1}`}
-            className={`h-1.5 rounded-full transition-all ${i === page ? "w-5 bg-white" : "w-1.5 bg-white/30"}`}
+            className={`h-1.5 rounded-full transition-all disabled:opacity-60 ${i === page ? "w-5 bg-white" : "w-1.5 bg-white/30"}`}
           />
         ))}
       </div>

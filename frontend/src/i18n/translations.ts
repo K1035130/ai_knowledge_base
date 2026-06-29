@@ -24,7 +24,7 @@ export const translations = {
       ack: "我已了解",
     },
     processing: "处理中...",
-    processingHint: "这可能需要一两分钟",
+    processingHint: "这可能需要三到五分钟",
     errorPrefix: "出错了：",
     retry: "重试",
     reupload: "上传新的导出文件",
@@ -39,6 +39,10 @@ export const translations = {
     nav: {
       prev: "上一页",
       next: "下一页",
+    },
+    export: {
+      button: "导出 HTML",
+      generating: "正在生成…",
     },
     overview: {
       total_conversations: "对话总数",
@@ -92,7 +96,7 @@ export const translations = {
       ack: "Got it",
     },
     processing: "Processing...",
-    processingHint: "This might take a minute or two",
+    processingHint: "This might take three to five minutes",
     errorPrefix: "Something went wrong: ",
     retry: "Retry",
     reupload: "Upload a new export",
@@ -107,6 +111,10 @@ export const translations = {
     nav: {
       prev: "Previous",
       next: "Next",
+    },
+    export: {
+      button: "Export HTML",
+      generating: "Generating…",
     },
     overview: {
       total_conversations: "Total conversations",
