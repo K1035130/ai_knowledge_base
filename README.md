@@ -2,6 +2,8 @@
 
 A personal analytics web app that turns your ChatGPT conversation export into a Bilibili-style "annual report": when you used AI, what you talked about, and a few narrative highlights pulled from your own history — rendered as a paginated, animated story you flip through like a slideshow. Started as a hands-on ML learning project (EDA → embeddings → clustering → LLM labeling) and grew into a full FastAPI + React app.
 
+Link: https://ai-personal-report.onrender.com/
+
 ## How it works
 
 1. Drag and drop your ChatGPT export's `conversations.json` (or several) onto the upload page.
