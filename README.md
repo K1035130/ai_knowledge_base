@@ -2,7 +2,8 @@
 
 A personal analytics web app that turns your ChatGPT conversation export into a Bilibili-style "annual report": when you used AI, what you talked about, and a few narrative highlights pulled from your own history — rendered as a paginated, animated story you flip through like a slideshow. Started as a hands-on ML learning project (EDA → embeddings → clustering → LLM labeling) and grew into a full FastAPI + React app.
 
-Link: https://ai-personal-report.onrender.com/
+Live (AWS): https://d2lwi9nb2rcmz1.cloudfront.net
+Previous (Render): https://ai-personal-report.onrender.com/
 
 ## How it works
 
@@ -80,12 +81,33 @@ This directly affects clustering quality (Stage 2) and report relevance, so don'
 
 ## Deployment
 
-The app is deployed on Render as two services — see `render.yaml`:
+The app runs on AWS:
 
-- **Backend** (Web Service): `pip install -r requirements-render.txt` (a minimal subset of `requirements.txt` — only what the backend's actual import chain needs; torch/sentence-transformers/jupyter/streamlit/matplotlib/plotly are only for local notebook work and just slow the build down if installed on Render), started with `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`. Needs `GEMINI_API_KEY` set in the dashboard, and `FRONTEND_ORIGIN` once the frontend's URL is known (CORS allowlist). `runtime.txt` pins the Python version.
-- **Frontend** (Static Site): `npm install && npm run build` in `frontend/`, publishes `frontend/dist`. Needs `VITE_API_BASE_URL` set to the backend's URL — this is baked in at build time, so changing it requires a redeploy, not just an env var update.
+```
+CloudFront (d2lwi9nb2rcmz1.cloudfront.net)
+    /*      → S3 bucket (static frontend, HTTP)
+    /api/*  → EC2 t3.micro nginx (HTTP) → uvicorn :8000
+```
 
-Both currently run on Render's free tier, which spins down after 15 minutes idle (cold start on the next request) and caps each service at 512MB RAM — the reason the embedding step runs through an API instead of a local model.
+- **Frontend**: built with `VITE_API_BASE_URL=https://d2lwi9nb2rcmz1.cloudfront.net`, uploaded to S3 (`aws s3 sync dist/ s3://ai-report-frontend-690167396475 --delete`). CloudFront serves it over HTTPS and caches at edge.
+- **Backend**: EC2 t3.micro (us-east-2), Ubuntu 24.04. nginx reverse-proxies port 80 → uvicorn on 127.0.0.1:8000. Managed by systemd (`ai-report.service`), starts on boot. `GEMINI_API_KEY` lives in `~/.env` on the instance. CORS allows the CloudFront origin.
+
+**Updating after a code change:**
+
+Backend:
+```bash
+ssh -i ~/.ssh/ai-report-key.pem ubuntu@52.14.134.168
+cd ai_knowledge_base && git pull
+sudo systemctl restart ai-report
+```
+
+Frontend:
+```bash
+cd frontend
+VITE_API_BASE_URL=https://d2lwi9nb2rcmz1.cloudfront.net npm run build
+aws s3 sync dist/ s3://ai-report-frontend-690167396475 --delete
+aws cloudfront create-invalidation --distribution-id E1JY8ZIWY8GN4W --paths "/*"
+```
 
 ## Privacy
 
@@ -95,12 +117,15 @@ The upload page shows a bilingual notice before any file is accepted: conversati
 
 - Parsing, usage profile, embedding/clustering, Gemini labeling, FastAPI backend, and the full React report UI are all built and validated against a real 741-conversation export.
 - `tests/test_parsing.py` covers the parser; the rest of the pipeline has been sanity-checked by diffing backend output against the notebook's already-confirmed numbers.
-- Deployed and live on Render (see Deployment above).
+- Deployed and live on AWS (CloudFront + S3 + EC2) — see Deployment above.
 - `notebooks/01_eda.ipynb` remains as the original exploratory workbench.
 
 ---
 
 # AI 知识库 —— 个人 AI 使用年度报告
+
+在线体验（AWS）：https://d2lwi9nb2rcmz1.cloudfront.net
+旧版（Render）：https://ai-personal-report.onrender.com/
 
 一个把 ChatGPT 对话导出文件加工成类似 Bilibili 年度报告的个人分析网页应用：你什么时候用的 AI、聊了什么主题，再从你自己的历史对话里摘出几条叙事性的高光时刻——做成可以像翻页故事一样逐页查看的动画报告。最初是一个边做边学的机器学习练习项目（EDA → embedding → 聚类 → LLM 命名），后来发展成了一套完整的 FastAPI + React 应用。
 
@@ -180,12 +205,33 @@ npm run dev
 
 ## 部署
 
-应用部署在 Render 上，分成两个服务——配置见 `render.yaml`：
+应用跑在 AWS 上：
 
-- **后端**（Web Service）：`pip install -r requirements-render.txt`（是 `requirements.txt` 的精简子集，只包含后端真实 import 链路用到的依赖——torch/sentence-transformers/jupyter/streamlit/matplotlib/plotly 只在本地 notebook 里用，装到 Render 上纯粹拖慢构建速度），用 `uvicorn backend.main:app --host 0.0.0.0 --port $PORT` 启动。需要在 Render 面板里手动填 `GEMINI_API_KEY`，等前端服务的网址确定后还要填 `FRONTEND_ORIGIN`（CORS 白名单）。`runtime.txt` 固定了 Python 版本。
-- **前端**（Static Site）：在 `frontend/` 下跑 `npm install && npm run build`，发布 `frontend/dist`。需要填 `VITE_API_BASE_URL` 指向后端网址——这个值是 build 时打包进静态文件的，改了之后必须重新部署才会生效，光改环境变量本身不够。
+```
+CloudFront (d2lwi9nb2rcmz1.cloudfront.net)
+    /*      → S3 bucket（静态前端，HTTP）
+    /api/*  → EC2 t3.micro nginx（HTTP）→ uvicorn :8000
+```
 
-两个服务目前都跑在 Render 免费版上：闲置15分钟后会休眠（下次请求要等冷启动），且每个服务内存上限是512MB——这也是为什么 embedding 这一步改成调 API 而不是跑本地模型的原因。
+- **前端**：以 `VITE_API_BASE_URL=https://d2lwi9nb2rcmz1.cloudfront.net` 构建，上传到 S3（`aws s3 sync dist/ s3://ai-report-frontend-690167396475 --delete`）。CloudFront 负责 HTTPS 终结和边缘缓存。
+- **后端**：EC2 t3.micro（us-east-2），Ubuntu 24.04。nginx 反向代理 80 端口 → uvicorn 监听 127.0.0.1:8000，由 systemd（`ai-report.service`）管理、开机自启。`GEMINI_API_KEY` 存在实例的 `~/.env` 文件里，CORS 白名单设为 CloudFront 域名。
+
+**更新代码后的部署流程：**
+
+后端：
+```bash
+ssh -i ~/.ssh/ai-report-key.pem ubuntu@52.14.134.168
+cd ai_knowledge_base && git pull
+sudo systemctl restart ai-report
+```
+
+前端：
+```bash
+cd frontend
+VITE_API_BASE_URL=https://d2lwi9nb2rcmz1.cloudfront.net npm run build
+aws s3 sync dist/ s3://ai-report-frontend-690167396475 --delete
+aws cloudfront create-invalidation --distribution-id E1JY8ZIWY8GN4W --paths "/*"
+```
 
 ## 隐私
 
@@ -195,5 +241,5 @@ npm run dev
 
 - 解析、使用画像、embedding/聚类、Gemini 命名、FastAPI 后端，以及完整的 React 报告界面都已经基于一份真实的 741 条对话导出文件构建并验证过。
 - `tests/test_parsing.py` 覆盖了解析器；流程剩余部分通过对比后端输出和 notebook 里已验证过的数字做了一致性检查。
-- 已经部署上线，跑在 Render 上（见上面的"部署"一节）。
+- 已经部署上线，跑在 AWS（CloudFront + S3 + EC2）上——见上面的"部署"一节。
 - `notebooks/01_eda.ipynb` 仍保留作为最初的探索性练习记录。
