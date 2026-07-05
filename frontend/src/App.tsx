@@ -4,7 +4,7 @@ import ExportGuide from "./components/ExportGuide";
 import PrivacyNotice from "./components/PrivacyNotice";
 import BackgroundBubbles from "./components/BackgroundBubbles";
 import LanguageToggle from "./components/LanguageToggle";
-import WaitingQuotes from "./components/WaitingQuotes";
+import Game2048 from "./components/Game2048";
 import ReportView from "./components/ReportView";
 import { uploadExports, getJobStatus, type ReportResult } from "./api";
 import { useLanguage } from "./i18n/LanguageContext";
@@ -49,6 +49,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [showPrivacyNotice, setShowPrivacyNotice] = useState(true);
   const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [showReport, setShowReport] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -104,7 +105,7 @@ function App() {
               <select
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-white/80 outline-none"
+                className="rounded-lg border border-white/10 bg-[#1a1430] px-2 py-1 text-sm text-white/80 outline-none"
               >
                 {!COMMON_TIMEZONES.includes(timezone) && (
                   <option value={timezone}>{timezone}</option>
@@ -127,17 +128,12 @@ function App() {
           </div>
         )}
 
-        {phase === "running" && (
-          <>
-            <div className="fixed top-[25%] left-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3 text-white/70">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-violet-400" />
-              <p>{step || t.processing}</p>
-              <p className="text-xs text-white/40">{t.processingHint}</p>
-            </div>
-            <div className="fixed top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
-              <WaitingQuotes />
-            </div>
-          </>
+        {(phase === "running" || (phase === "done" && !showReport)) && (
+          <Game2048
+            reportReady={phase === "done"}
+            step={step}
+            onViewReport={() => setShowReport(true)}
+          />
         )}
 
         {phase === "error" && (
@@ -156,12 +152,13 @@ function App() {
           </div>
         )}
 
-        {phase === "done" && report && (
+        {phase === "done" && showReport && report && (
           <ReportView
             report={report}
             onReupload={() => {
               setPhase("idle");
               setReport(null);
+              setShowReport(false);
             }}
           />
         )}
