@@ -45,6 +45,7 @@ export const translations = {
       generating: "正在生成…",
       error: "导出失败，请重试",
     },
+    timezone: { label: "时区" },
     overview: {
       total_conversations: "对话总数",
       total_messages: "消息总数",
@@ -118,6 +119,7 @@ export const translations = {
       generating: "Generating…",
       error: "Export failed, please try again",
     },
+    timezone: { label: "Timezone" },
     overview: {
       total_conversations: "Total conversations",
       total_messages: "Total messages",

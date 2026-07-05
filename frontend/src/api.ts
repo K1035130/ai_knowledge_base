@@ -49,12 +49,13 @@ export interface JobStatus {
   error: string | null;
 }
 
-export async function uploadExports(files: File[], lang: "zh" | "en"): Promise<string> {
+export async function uploadExports(files: File[], lang: "zh" | "en", timezone: string): Promise<string> {
   const form = new FormData();
   for (const file of files) {
     form.append("files", file);
   }
   form.append("lang", lang);
+  form.append("timezone", timezone);
   const res = await fetch(`${API_BASE}/api/reports`, { method: "POST", body: form });
   if (!res.ok) {
     let detail = `Upload failed: ${res.status}`;

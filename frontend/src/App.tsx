@@ -11,6 +11,32 @@ import { useLanguage } from "./i18n/LanguageContext";
 
 type Phase = "idle" | "running" | "done" | "error";
 
+const COMMON_TIMEZONES = [
+  "UTC",
+  "America/Vancouver",
+  "America/Los_Angeles",
+  "America/Denver",
+  "America/Chicago",
+  "America/New_York",
+  "America/Toronto",
+  "America/Sao_Paulo",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Moscow",
+  "Asia/Dubai",
+  "Asia/Kolkata",
+  "Asia/Bangkok",
+  "Asia/Shanghai",
+  "Asia/Hong_Kong",
+  "Asia/Singapore",
+  "Asia/Taipei",
+  "Asia/Tokyo",
+  "Asia/Seoul",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+];
+
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -22,6 +48,7 @@ function App() {
   const [report, setReport] = useState<ReportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPrivacyNotice, setShowPrivacyNotice] = useState(true);
+  const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -37,7 +64,7 @@ function App() {
     setError(null);
     setStep(t.processing);
     try {
-      const jobId = await uploadExports(files, lang);
+      const jobId = await uploadExports(files, lang, timezone);
       pollRef.current = window.setInterval(async () => {
         try {
           const job = await getJobStatus(jobId);
@@ -71,7 +98,22 @@ function App() {
 
       <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center gap-6">
         {phase === "idle" && (
-          <div className="self-end">
+          <div className="flex items-center gap-3 self-end">
+            <label className="flex items-center gap-2 text-sm text-white/50">
+              {t.timezone.label}
+              <select
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-white/80 outline-none"
+              >
+                {!COMMON_TIMEZONES.includes(timezone) && (
+                  <option value={timezone}>{timezone}</option>
+                )}
+                {COMMON_TIMEZONES.map((tz) => (
+                  <option key={tz} value={tz}>{tz}</option>
+                ))}
+              </select>
+            </label>
             <LanguageToggle />
           </div>
         )}

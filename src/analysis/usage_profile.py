@@ -7,12 +7,14 @@ from langdetect import LangDetectException, detect
 _TOKEN_ENCODING = tiktoken.get_encoding("cl100k_base")
 
 
-def add_time_features(df: pd.DataFrame) -> pd.DataFrame:
+def add_time_features(df: pd.DataFrame, timezone: str = "UTC") -> pd.DataFrame:
     df = df.copy()
-    df["date"] = df["timestamp"].dt.date
-    df["hour"] = df["timestamp"].dt.hour
-    df["weekday"] = df["timestamp"].dt.day_name()
-    df["month"] = df["timestamp"].dt.to_period("M").astype(str)
+    ts = df["timestamp"].dt.tz_localize("UTC").dt.tz_convert(timezone)
+    df["timestamp"] = ts
+    df["date"] = ts.dt.date
+    df["hour"] = ts.dt.hour
+    df["weekday"] = ts.dt.day_name()
+    df["month"] = ts.dt.strftime("%Y-%m")
     return df
 
 

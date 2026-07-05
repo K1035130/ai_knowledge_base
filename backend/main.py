@@ -60,13 +60,13 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-def _run_job(job_id: str, export_paths: list[Path], lang: str, tmp_dir: str) -> None:
+def _run_job(job_id: str, export_paths: list[Path], lang: str, timezone: str, tmp_dir: str) -> None:
     def on_progress(step: str) -> None:
         log_rss(f"[{job_id[:8]}] {step}")
         _jobs[job_id]["step"] = step
 
     try:
-        result = build_report(export_paths, lang=lang, on_progress=on_progress)
+        result = build_report(export_paths, lang=lang, timezone=timezone, on_progress=on_progress)
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["result"] = result
     except Exception as exc:
@@ -81,6 +81,7 @@ async def create_report(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     lang: str = Form("zh"),
+    timezone: str = Form("UTC"),
 ) -> dict:
     if not files:
         raise HTTPException(400, "No files uploaded")
@@ -123,7 +124,7 @@ async def create_report(
         "error": None,
         "created_at": time.monotonic(),
     }
-    background_tasks.add_task(_run_job, job_id, export_paths, lang, tmp_dir)
+    background_tasks.add_task(_run_job, job_id, export_paths, lang, timezone, tmp_dir)
 
     return {"job_id": job_id}
 

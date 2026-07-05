@@ -56,13 +56,14 @@ def _series_to_native(series: pd.Series, value_type: type = int) -> dict:
 def build_report(
     export_paths: list[Path],
     lang: str = "zh",
+    timezone: str = "UTC",
     on_progress: ProgressCallback = lambda step: None,
 ) -> dict:
     steps = _STEPS["en"] if lang == "en" else _STEPS["zh"]
 
     on_progress(steps["parse"])
     df = parse_exports(export_paths)
-    df = up.add_time_features(df)
+    df = up.add_time_features(df, timezone=timezone)
     log_rss("after parsing")
 
     on_progress(steps["clean"])
