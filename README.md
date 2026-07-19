@@ -109,6 +109,8 @@ aws s3 sync dist/ s3://ai-report-frontend-690167396475 --delete
 aws cloudfront create-invalidation --distribution-id E1JY8ZIWY8GN4W --paths "/*"
 ```
 
+**Hibernating the backend to save cost:** the EC2 instance has no Elastic IP, so its public DNS changes on every stop/start — `deploy/aws-sleep.ps1` stops the instance, `deploy/aws-wake.ps1` starts it and repoints CloudFront's `/api/*` origin at the new address (waits on `instance-status-ok` then `distribution-deployed`, so it can take 5-15 minutes end to end). The frontend stays reachable the whole time; only `/api/*` is down while asleep.
+
 ## Privacy
 
 The upload page shows a bilingual notice before any file is accepted: conversation files are processed entirely in memory, never written to persistent storage, and never used for anything beyond generating the report for that one session.
@@ -232,6 +234,8 @@ VITE_API_BASE_URL=https://d2lwi9nb2rcmz1.cloudfront.net npm run build
 aws s3 sync dist/ s3://ai-report-frontend-690167396475 --delete
 aws cloudfront create-invalidation --distribution-id E1JY8ZIWY8GN4W --paths "/*"
 ```
+
+**让后端进入休眠以省钱：** 这台 EC2 实例没有绑 Elastic IP，每次 stop/start 公网 DNS 都会变——`deploy/aws-sleep.ps1` 负责停机，`deploy/aws-wake.ps1` 负责开机并把 CloudFront 的 `/api/*` origin 改指向新地址（会依次等待 `instance-status-ok` 和 `distribution-deployed`，整个流程大概要 5-15 分钟）。休眠期间前端始终可访问，只有 `/api/*` 会不可用。
 
 ## 隐私
 
