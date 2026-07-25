@@ -19,7 +19,7 @@ Everything is bilingual end-to-end (Chinese/English) : the language you pick on 
 |---|---|---|
 | 0. Parsing | Flattens the ChatGPT export's branching `mapping` tree (handles retried/regenerated messages) into a tidy table: `conversation_id, turn, role, timestamp, text` | `src/parsing/chatgpt_parser.py` |
 | 1. Usage profile | Activity by hour/weekday/month, session/thread-span/response-time stats, language ratio, rewrite/regen rate | `src/analysis/usage_profile.py` |
-| 2. Embedding + clustering | Embeds conversations via Gemini's embedding API (`gemini-embedding-001`), picks k via the kneedle method on KMeans inertia, extracts topic keywords with c-TF-IDF | `src/embedding/encoder.py`, `src/clustering/topic_model.py` |
+| 2. Embedding + clustering | Embeds conversations via Gemini's embedding API (`gemini-embedding-001`), picks k via the kneedle method on KMeans inertia, extracts topic keywords with TF-IDF | `src/embedding/encoder.py`, `src/clustering/topic_model.py` |
 | 3. LLM labeling | Gemini names each topic cluster and writes a one-sentence highlight for a sampled conversation per month, in the user's chosen language | `src/llm/gemini_client.py` |
 | 4. Report orchestration | Runs the full pipeline end-to-end and reports progress step-by-step | `backend/pipeline.py` |
 | 5. API + job queue | FastAPI endpoints for upload (`POST /api/reports`) and polling (`GET /api/reports/{job_id}`), in-memory job store, background task execution | `backend/main.py` |
