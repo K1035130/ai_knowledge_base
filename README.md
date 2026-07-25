@@ -145,7 +145,7 @@ The upload page shows a bilingual notice before any file is accepted: conversati
 |---|---|---|
 | 0. 解析 | 把 ChatGPT 导出文件里带分支的 `mapping` 树结构（处理"重新生成"留下的分支）摊平成整洁表格：`conversation_id, turn, role, timestamp, text` | `src/parsing/chatgpt_parser.py` |
 | 1. 使用画像 | 按小时/星期/月份统计活跃度、会话/对话线程跨度/响应时间统计、语言占比、改写/重新生成率 | `src/analysis/usage_profile.py` |
-| 2. Embedding + 聚类 | 调用 Gemini 的 embedding API（`gemini-embedding-001`）编码对话，用 kneedle 方法在 KMeans inertia 曲线上选 k，再用 c-TF-IDF 提取主题关键词 | `src/embedding/encoder.py`、`src/clustering/topic_model.py` |
+| 2. Embedding + 聚类 | 调用 Gemini 的 embedding API（`gemini-embedding-001`）编码对话，用 kneedle 方法在 KMeans inertia 曲线上选 k，再用 TF-IDF 提取主题关键词 | `src/embedding/encoder.py`、`src/clustering/topic_model.py` |
 | 3. LLM 命名 | Gemini 给每个话题簇命名，并按用户选择的语言为每月抽样的一条对话写一句高光小结 | `src/llm/gemini_client.py` |
 | 4. 报告编排 | 端到端跑完整个流程，逐步上报进度 | `backend/pipeline.py` |
 | 5. API + 任务队列 | FastAPI 接口负责上传（`POST /api/reports`）和轮询（`GET /api/reports/{job_id}`），内存任务存储，后台异步执行 | `backend/main.py` |
