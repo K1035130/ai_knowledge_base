@@ -111,7 +111,8 @@ def label_cluster(keywords: list[str], lang: str = "zh", model: str = CHAT_MODEL
             "'Visa Application') — avoid vague, abstract, or poetic phrasing. If the keywords are too mixed "
             "to point to anything specific, just output 'Other'. Output only the name itself — no quotes, no "
             "explanation, no more than 4 words.\n"
-            f"Keywords: { ', '.join(keywords) }"
+            f"Keywords: { ', '.join(keywords) }\n"
+            "Answer in English, even though some of the keywords above are Chinese."
         )
     else:
         prompt = (
@@ -120,7 +121,8 @@ def label_cluster(keywords: list[str], lang: str = "zh", model: str = CHAT_MODEL
             "（比如「编程」「数学计算」「生物研究」「签证申请」），可以包含有意义的代表词，不要用空洞抽象、文艺化的措辞。"
             "如果关键词杂乱、看不出具体指向什么领域，就直接输出「其他」。"
             "只输出词语本身，不要解释、不要加引号、不要超过4个字。\n"
-            f"关键词：{ '、'.join(keywords) }"
+            f"关键词：{ '、'.join(keywords) }\n"
+            "即使上面的关键词是英文，也要用中文回答。"
         )
     return _generate_with_retry(model, prompt)
 
@@ -145,20 +147,31 @@ def embed_texts(
 
 
 def summarize_highlight(conversation_text: str, lang: str = "zh", model: str = CHAT_MODEL) -> str:
-    """One-line, narrative-style summary of a single real conversation, for the annual-report highlight reel."""
+    """One-line, narrative-style summary of a single real conversation, for the annual-report highlight reel.
+
+    The output-language instruction is repeated after the conversation on purpose. With it stated
+    only up front, the model mirrored the source language instead of the requested one roughly half
+    the time on Chinese conversations with lang="en" -- the conversation is the last thing it reads
+    before generating, so the language requirement has to be the thing that comes after it.
+    """
     if lang == "en":
         prompt = (
+            "Write your answer in English.\n\n"
             "Below is a real conversation between a user and an AI (user/assistant turns, possibly "
             "truncated). In one sentence (no more than 25 words), summarize what the user did or asked "
             "about in this conversation. Address the user as 'you', in a natural tone like a one-line "
             "callout in an annual usage report. Don't quote the text verbatim, no quotation marks.\n\n"
-            f"{conversation_text}"
+            f"{conversation_text}\n\n"
+            "Now write that one-sentence summary. The conversation above may be in Chinese or another "
+            "language; write the summary in English regardless. Output English only."
         )
     else:
         prompt = (
+            "用中文回答。\n\n"
             "以下是用户和AI之间的一段真实对话（user/assistant交替发言，可能被截断）。"
             "用一句话（不超过30个字）总结用户在这段对话里做了什么或问了什么，将用户称为‘你’"
             "语气自然、像年度报告里的一句小故事，不要逐字复述原文，不要加引号。\n\n"
-            f"{conversation_text}"
+            f"{conversation_text}\n\n"
+            "现在写出这句总结。上面的对话可能是英文或其他语言，无论如何都要用中文写，只输出中文。"
         )
     return _generate_with_retry(model, prompt)

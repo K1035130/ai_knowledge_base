@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: ai-usage-report-backend
+    name: ai_report_backend
     env: python
     plan: free
     buildCommand: pip install -r requirements-render.txt
@@ -12,7 +12,7 @@ services:
         sync: false
 
   - type: web
-    name: ai-usage-report-frontend
+    name: ai_personal_report
     env: static
     plan: free
     buildCommand: cd frontend && npm install && npm run build

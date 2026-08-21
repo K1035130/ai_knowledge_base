@@ -2,8 +2,11 @@
 
 A personal analytics web app that turns your ChatGPT conversation export into a Bilibili-style "annual report": when you used AI, what you talked about, and a few narrative highlights pulled from your own history : rendered as a paginated, animated story you flip through like a slideshow. Started as a hands-on ML learning project (EDA → embeddings → clustering → LLM labeling) and grew into a full FastAPI + React app.
 
-Live (AWS): https://d2lwi9nb2rcmz1.cloudfront.net
-Previous (Render): https://ai-personal-report.onrender.com/
+**Try it here: https://ai-personal-report.onrender.com/** : this is the entry point to use.
+
+Also live on AWS at https://d2lwi9nb2rcmz1.cloudfront.net, which serves the same frontend from S3/CloudFront. Both front ends now talk to the same backend on Render, so either works : the Render one is preferred simply because it is the deployment that is actually being maintained.
+
+No export of your own handy? Both entry points have a **"See a sample report"** link under the upload box that opens a pre-generated report, so you can see the whole thing without uploading anything.
 
 ## How it works
 
@@ -83,27 +86,31 @@ This directly affects clustering quality (Stage 2) and report relevance, so don'
 
 ## Deployment
 
-The app runs on AWS:
+**The backend runs on Render.** It used to run on an EC2 t3.micro behind CloudFront; that instance was terminated on 2026-08-21 and the whole thing moved to Render for cost reasons. A t3.micro plus its EBS volume costs real money every month whether or not anyone visits, and for a personal project that sits idle most of the time that was the single largest line item. Render's free tier costs nothing at idle, and it also removed the EC2-specific operational overhead entirely : no nginx to configure, no systemd unit, no SSH, and no public-DNS churn on every stop/start.
+
+There are two front ends, both pointing at that one backend:
 
 ```
-CloudFront (d2lwi9nb2rcmz1.cloudfront.net)
-    /*      → S3 bucket (static frontend, HTTP)
-    /api/*  → EC2 t3.micro nginx (HTTP) → uvicorn :8000
+https://ai-personal-report.onrender.com     (preferred)
+    static site on Render
+    /api/*  → called directly, cross-origin (CORS allow-lists this origin)
+
+https://d2lwi9nb2rcmz1.cloudfront.net       (still live)
+    /*      → S3 bucket (static frontend)
+    /api/*  → CloudFront origin → ai-report-backend-d7vs.onrender.com
 ```
 
-- **Frontend**: built with `VITE_API_BASE_URL=https://d2lwi9nb2rcmz1.cloudfront.net`, uploaded to S3 (`aws s3 sync dist/ s3://ai-report-frontend-690167396475 --delete`). CloudFront serves it over HTTPS and caches at edge.
-- **Backend**: EC2 t3.micro (us-east-2), Ubuntu 24.04. nginx reverse-proxies port 80 → uvicorn on 127.0.0.1:8000. Managed by systemd (`ai-report.service`), starts on boot. `SILICONFLOW_API_KEY` lives in `~/.env` on the instance. CORS allows the CloudFront origin.
+- **Backend** (`ai-report-backend-d7vs.onrender.com`): Render web service, free tier, built from `requirements-render.txt`. `SILICONFLOW_API_KEY` and `FRONTEND_ORIGIN` are set in the Render dashboard (`sync: false` in `render.yaml`, so they are never committed). Deploys automatically on push to `main`.
+- **Render frontend**: static site, built with `VITE_API_BASE_URL` pointing straight at the backend. Because that is a different origin, uploads depend on the backend's `FRONTEND_ORIGIN` CORS allow-list.
+- **CloudFront frontend**: built with `VITE_API_BASE_URL=https://d2lwi9nb2rcmz1.cloudfront.net`, so the browser sees `/api/*` as same-origin and CORS never comes into play. CloudFront's `/api/*` behavior forwards to Render with the `Managed-AllViewerExceptHostHeader` origin request policy : this part is load-bearing. Render routes by `Host` header, so forwarding the viewer's `Host` (i.e. the CloudFront domain) would make Render's router return an empty 404 for every API call.
+
+**The free tier spins down after about 15 minutes of inactivity.** The first request after that waits on a cold start, which can exceed CloudFront's 60s origin read timeout and surface as a 504 : retrying once works. The sample-report link is a static JSON file, so it always opens regardless of whether the backend is awake.
 
 **Updating after a code change:**
 
-Backend:
-```bash
-ssh -i ~/.ssh/ai-report-key.pem ubuntu@52.14.134.168
-cd ai_knowledge_base && git pull
-sudo systemctl restart ai-report
-```
+Backend and Render frontend: just `git push` : Render rebuilds both.
 
-Frontend:
+CloudFront frontend:
 ```bash
 cd frontend
 VITE_API_BASE_URL=https://d2lwi9nb2rcmz1.cloudfront.net npm run build
@@ -111,7 +118,7 @@ aws s3 sync dist/ s3://ai-report-frontend-690167396475 --delete
 aws cloudfront create-invalidation --distribution-id E1JY8ZIWY8GN4W --paths "/*"
 ```
 
-**Hibernating the backend to save cost:** the EC2 instance has no Elastic IP, so its public DNS changes on every stop/start — `deploy/aws-sleep.ps1` stops the instance, `deploy/aws-wake.ps1` starts it and repoints CloudFront's `/api/*` origin at the new address (waits on `instance-status-ok` then `distribution-deployed`, so it can take 5-15 minutes end to end). The frontend stays reachable the whole time; only `/api/*` is down while asleep.
+The old `deploy/aws-sleep.ps1` / `deploy/aws-wake.ps1` hibernation scripts were deleted along with the instance : `aws-wake.ps1` repointed CloudFront's `/api/*` origin back at EC2, which would now break the API. The terminated instance's root volume survives as snapshot `snap-0dc0e51a8745eb693` (nginx + systemd config), in case that setup is ever needed again.
 
 ## Privacy
 
@@ -121,15 +128,18 @@ The upload page shows a bilingual notice before any file is accepted: conversati
 
 - Parsing, usage profile, embedding/clustering, LLM labeling, FastAPI backend, and the full React report UI are all built and validated against a real 741-conversation export.
 - `tests/test_parsing.py` covers the parser; the rest of the pipeline has been sanity-checked by diffing backend output against the notebook's already-confirmed numbers.
-- Deployed and live on AWS (CloudFront + S3 + EC2) : see Deployment above.
+- Deployed and live: backend on Render, frontend served both from Render and from S3/CloudFront : see Deployment above.
 - `notebooks/01_eda.ipynb` remains as the original exploratory workbench.
 
 ---
 
 # AI 知识库 :: 个人 AI 使用年度报告
 
-在线体验（AWS）：https://d2lwi9nb2rcmz1.cloudfront.net
-旧版（Render）：https://ai-personal-report.onrender.com/
+**在线体验入口：https://ai-personal-report.onrender.com/** ::想试用请优先从这里进。
+
+AWS 上的 https://d2lwi9nb2rcmz1.cloudfront.net 也还活着，跑的是同一份前端（托管在 S3/CloudFront）。两个前端现在连的是同一个 Render 后端，所以哪个都能用::之所以推荐 Render 那个，只是因为它才是持续在维护的那套部署。
+
+手边没有自己的导出文件？两个入口的上传框下面都有一个 **"看一份示例报告"** 的链接，点开就是一份预先生成好的完整报告，不用上传任何东西也能看到全貌。
 
 一个把 ChatGPT 对话导出文件加工成类似 Bilibili 年度报告的个人分析网页应用：你什么时候用的 AI、聊了什么主题，再从你自己的历史对话里摘出几条叙事性的高光时刻::做成可以像翻页故事一样逐页查看的动画报告。最初是一个边做边学的机器学习练习项目（EDA → embedding → 聚类 → LLM 命名），后来发展成了一套完整的 FastAPI + React 应用。
 
@@ -211,27 +221,31 @@ npm run dev
 
 ## 部署
 
-应用跑在 AWS 上：
+**后端跑在 Render 上。** 原本是跑在 CloudFront 后面的一台 EC2 t3.micro，那台实例已于 2026-08-21 终止，整套迁到了 Render，**原因是成本**：t3.micro 加上它的 EBS 卷，不管有没有人访问都要按月实打实地付钱，而这种大部分时间闲置的个人项目，这就是最大的一笔开销。Render 免费版闲置时不产生费用，顺带还把 EC2 那套运维负担整个消掉了::不用配 nginx、不用写 systemd unit、不用 SSH，也不用再应付每次 stop/start 公网 DNS 都会变的问题。
+
+现在有两个前端，连的是同一个后端：
 
 ```
-CloudFront (d2lwi9nb2rcmz1.cloudfront.net)
-    /*      → S3 bucket（静态前端，HTTP）
-    /api/*  → EC2 t3.micro nginx（HTTP）→ uvicorn :8000
+https://ai-personal-report.onrender.com     （推荐入口）
+    Render 上的静态站点
+    /api/*  → 直接跨域调用后端（CORS 白名单里有这个域名）
+
+https://d2lwi9nb2rcmz1.cloudfront.net       （仍然可用）
+    /*      → S3 bucket（静态前端）
+    /api/*  → CloudFront origin → ai-report-backend-d7vs.onrender.com
 ```
 
-- **前端**：以 `VITE_API_BASE_URL=https://d2lwi9nb2rcmz1.cloudfront.net` 构建，上传到 S3（`aws s3 sync dist/ s3://ai-report-frontend-690167396475 --delete`）。CloudFront 负责 HTTPS 终结和边缘缓存。
-- **后端**：EC2 t3.micro（us-east-2），Ubuntu 24.04。nginx 反向代理 80 端口 → uvicorn 监听 127.0.0.1:8000，由 systemd（`ai-report.service`）管理、开机自启。`SILICONFLOW_API_KEY` 存在实例的 `~/.env` 文件里，CORS 白名单设为 CloudFront 域名。
+- **后端**（`ai-report-backend-d7vs.onrender.com`）：Render Web Service，免费版，按 `requirements-render.txt` 构建。`SILICONFLOW_API_KEY` 和 `FRONTEND_ORIGIN` 在 Render 控制台里设置（`render.yaml` 里是 `sync: false`，所以永远不会被提交进仓库）。推送到 `main` 会自动部署。
+- **Render 前端**：静态站点，构建时 `VITE_API_BASE_URL` 直接指向后端。因为这是跨域调用，所以上传功能依赖后端 `FRONTEND_ORIGIN` 里的 CORS 白名单。
+- **CloudFront 前端**：以 `VITE_API_BASE_URL=https://d2lwi9nb2rcmz1.cloudfront.net` 构建，因此浏览器看到的 `/api/*` 是同源请求，压根不会触发 CORS。CloudFront 的 `/api/*` 行为用 `Managed-AllViewerExceptHostHeader` 这条 origin request policy 转发到 Render::**这一条是关键**。Render 靠 `Host` 头决定路由，如果把访客的 `Host`（也就是 CloudFront 域名）原样转发过去，Render 的路由器会对每个 API 请求返回一个空的 404。
+
+**免费版闲置约 15 分钟后会 spin down。** 之后的第一个请求要等冷启动，可能超过 CloudFront 60 秒的 origin 读取超时而表现为 504::重试一次即可。示例报告是个静态 JSON 文件，所以不管后端醒着还是睡着都能打开。
 
 **更新代码后的部署流程：**
 
-后端：
-```bash
-ssh -i ~/.ssh/ai-report-key.pem ubuntu@52.14.134.168
-cd ai_knowledge_base && git pull
-sudo systemctl restart ai-report
-```
+后端和 Render 前端：直接 `git push` 就行::Render 会自动重新构建这两个。
 
-前端：
+CloudFront 前端：
 ```bash
 cd frontend
 VITE_API_BASE_URL=https://d2lwi9nb2rcmz1.cloudfront.net npm run build
@@ -239,7 +253,7 @@ aws s3 sync dist/ s3://ai-report-frontend-690167396475 --delete
 aws cloudfront create-invalidation --distribution-id E1JY8ZIWY8GN4W --paths "/*"
 ```
 
-**让后端进入休眠以省钱：** 这台 EC2 实例没有绑 Elastic IP，每次 stop/start 公网 DNS 都会变——`deploy/aws-sleep.ps1` 负责停机，`deploy/aws-wake.ps1` 负责开机并把 CloudFront 的 `/api/*` origin 改指向新地址（会依次等待 `instance-status-ok` 和 `distribution-deployed`，整个流程大概要 5-15 分钟）。休眠期间前端始终可访问，只有 `/api/*` 会不可用。
+原来的 `deploy/aws-sleep.ps1` / `deploy/aws-wake.ps1` 休眠脚本已经随实例一起删除::`aws-wake.ps1` 的作用是把 CloudFront 的 `/api/*` origin 指回 EC2，现在再跑一次只会把 API 弄挂。那台实例的根卷保留成了快照 `snap-0dc0e51a8745eb693`（含 nginx 和 systemd 配置），万一以后还需要那套环境可以从它恢复。
 
 ## 隐私
 
@@ -249,5 +263,5 @@ aws cloudfront create-invalidation --distribution-id E1JY8ZIWY8GN4W --paths "/*"
 
 - 解析、使用画像、embedding/聚类、大模型命名、FastAPI 后端，以及完整的 React 报告界面都已经基于一份真实的 741 条对话导出文件构建并验证过。
 - `tests/test_parsing.py` 覆盖了解析器；流程剩余部分通过对比后端输出和 notebook 里已验证过的数字做了一致性检查。
-- 已经部署上线，跑在 AWS（CloudFront + S3 + EC2）上::见上面的"部署"一节。
+- 已经部署上线：后端在 Render，前端同时由 Render 和 S3/CloudFront 提供::见上面的"部署"一节。
 - `notebooks/01_eda.ipynb` 仍保留作为最初的探索性练习记录。
