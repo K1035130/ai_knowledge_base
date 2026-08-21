@@ -19,9 +19,16 @@ from src.clustering import topic_model as tm  # noqa: E402
 from src.embedding import encoder  # noqa: E402
 from src.llm.siliconflow_client import label_cluster, summarize_highlight  # noqa: E402
 from src.parsing.chatgpt_parser import parse_exports  # noqa: E402
+from src.utils.concurrency import map_ordered  # noqa: E402
 from src.utils.memlog import log_rss  # noqa: E402
 
 ProgressCallback = Callable[[str], None]
+
+# One LLM call per month, each independent and a few seconds long -- run one at a time this was
+# the slowest step in the whole build. The prompts are small (1500 chars capped below), so unlike
+# the embedding fan-out this one is nowhere near any token limit; sizing the pool to the same 12
+# months the sample is capped at below gets the whole step done in a single wave.
+_HIGHLIGHT_WORKERS = 12
 
 _STEPS = {
     "zh": {
@@ -140,11 +147,18 @@ def build_report(
         .sort_index()
         .tail(12)
     )
-    highlights = []
+    monthly_texts = []
     for month, conv_id in monthly_sample.items():
         rows = clean_df.loc[clean_df["conversation_id"] == conv_id].sort_values("timestamp")
         text = "\n".join(f"{row.role}: {row.text}" for row in rows.itertuples())[:1500]
-        highlights.append({"month": month, "text": summarize_highlight(text, lang=lang)})
+        monthly_texts.append((month, text))
+    # Ordered fan-out keeps each summary matched to the month whose conversation produced it.
+    summaries = map_ordered(
+        lambda month_text: summarize_highlight(month_text[1], lang=lang),
+        monthly_texts,
+        _HIGHLIGHT_WORKERS,
+    )
+    highlights = [{"month": month, "text": text} for (month, _), text in zip(monthly_texts, summaries)]
 
     on_progress(steps["done"])
     return {

@@ -7,8 +7,10 @@ that also keeps the door open to any other OpenAI-compatible provider by swappin
 """
 
 import os
+import random
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -28,6 +30,10 @@ from config import CHAT_MODEL, EMBEDDING_MODEL, SILICONFLOW_BASE_URL  # noqa: E4
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 _client = None
+# encoder.py embeds batches from a thread pool, so the lazy init below can be entered by several
+# threads at once -- guard it so they share one client (and one httpx connection pool) instead of
+# each building their own.
+_client_lock = threading.Lock()
 # Qwen3 emits its chain of thought inside <think>...</think> when thinking mode is on. We turn it
 # off per request, but strip the block anyway so a provider-side default can't leak into a label.
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
@@ -36,30 +42,47 @@ _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
 def get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = OpenAI(
-            api_key=os.environ["SILICONFLOW_API_KEY"],
-            base_url=os.environ.get("SILICONFLOW_BASE_URL", SILICONFLOW_BASE_URL),
-        )
+        with _client_lock:
+            if _client is None:  # re-check: another thread may have built it while we waited
+                _client = OpenAI(
+                    api_key=os.environ["SILICONFLOW_API_KEY"],
+                    base_url=os.environ.get("SILICONFLOW_BASE_URL", SILICONFLOW_BASE_URL),
+                )
     return _client
+
+
+def _rate_limit_delay(exc: RateLimitError, attempt: int) -> float:
+    """How long to wait after a 429.
+
+    Prefer the provider's own Retry-After header when it sends one; otherwise back off 15/30/60s,
+    since RPM/TPM limits reset on a rolling ~60s window rather than clearing in a few seconds.
+    The random jitter matters more than it looks: encoder.py fires 8 batches concurrently, so a
+    fixed delay would have all eight wake up in lockstep and re-trip the same limit together."""
+    response = getattr(exc, "response", None)
+    header = response.headers.get("retry-after") if response is not None else None
+    try:
+        delay = float(header) if header else 15.0 * 2**attempt
+    except ValueError:  # Retry-After may also be an HTTP-date, which we don't bother parsing
+        delay = 15.0 * 2**attempt
+    return min(delay, 60.0) + random.uniform(0, 1.0)
 
 
 def _call_with_retry(fn, max_retries: int = 3):
     """The provider occasionally returns a transient 5xx or drops the connection -- retry a few
     times with backoff instead of letting one flaky call kill an entire report build that may have
-    already spent a minute on embedding/clustering. Also retries 429s (rate/quota limit) with a
-    longer wait, since RPM/TPM limits reset on a rolling ~60s window rather than clearing in a few
-    seconds."""
+    already spent a minute on embedding/clustering. 429s (rate/quota limit) get their own, longer
+    schedule -- see _rate_limit_delay."""
     for attempt in range(max_retries):
         try:
             return fn()
-        except RateLimitError:
+        except RateLimitError as exc:
             if attempt == max_retries - 1:
                 raise
-            time.sleep(30 * (attempt + 1))
+            time.sleep(_rate_limit_delay(exc, attempt))
         except (InternalServerError, APIConnectionError, APITimeoutError):
             if attempt == max_retries - 1:
                 raise
-            time.sleep(2**attempt)
+            time.sleep(2**attempt + random.uniform(0, 0.5))
         except APIStatusError:
             raise  # 4xx other than 429 (bad key, bad model name, over-long input): retrying won't help
     raise RuntimeError("unreachable")  # loop always returns or raises

@@ -8,14 +8,16 @@ BAAI/bge-m3 after Gemini's access policy changed.)
 """
 
 import sys
+from functools import partial
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-from config import EMBEDDING_DIR, EMBEDDING_MODEL  # noqa: E402
+from config import EMBEDDING_DIM, EMBEDDING_DIR, EMBEDDING_MODEL  # noqa: E402
 from src.llm.siliconflow_client import embed_texts  # noqa: E402
+from src.utils.concurrency import map_ordered  # noqa: E402
 
 _BATCH_SIZE = 32  # conservative: the API caps both items and total tokens per request
 # bge-m3 accepts 8192 tokens per input and rejects (400) anything longer, which would kill a whole
@@ -23,16 +25,23 @@ _BATCH_SIZE = 32  # conservative: the API caps both items and total tokens per r
 # one token per character, the worst case, so 6000 chars stays inside the limit either way.
 # The opening of a conversation carries the topic, which is all the clustering downstream needs.
 _MAX_DOC_CHARS = 6000
+# Batches are fanned out concurrently (see map_ordered). Kept deliberately modest: the point is
+# to overlap latency, and these are the token-heavy calls in the build (~50k tokens each), so
+# pushing past the provider's TPM limit would turn into 429s whose backoff costs far more than
+# the concurrency saves.
+_MAX_WORKERS = 8
 
 
 def encode_texts(texts: list[str], model_name: str = EMBEDDING_MODEL) -> np.ndarray:
     texts = [t[:_MAX_DOC_CHARS] for t in texts]
-    vectors: list[list[float]] = []
-    for i in range(0, len(texts), _BATCH_SIZE):
-        batch = texts[i : i + _BATCH_SIZE]
-        vectors.extend(embed_texts(batch, model=model_name))
+    batches = [texts[i : i + _BATCH_SIZE] for i in range(0, len(texts), _BATCH_SIZE)]
+    if not batches:
+        return np.empty((0, EMBEDDING_DIM), dtype=np.float32)
 
-    arr = np.array(vectors, dtype=np.float32)
+    # Ordered fan-out keeps every vector aligned with its input text.
+    batch_results = map_ordered(partial(embed_texts, model=model_name), batches, _MAX_WORKERS)
+
+    arr = np.array([v for batch in batch_results for v in batch], dtype=np.float32)
     # L2-normalize so KMeans' Euclidean distance behaves like cosine similarity,
     # matching the previous sentence-transformers setup (normalize_embeddings=True).
     norms = np.linalg.norm(arr, axis=1, keepdims=True)
