@@ -13,5 +13,5 @@ jieba
 stopwordsiso
 tiktoken
 langdetect
-google-genai
+openai
 python-dotenv

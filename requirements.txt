@@ -13,7 +13,7 @@ jieba
 stopwordsiso
 langdetect
 tiktoken
-google-genai
+openai
 python-dotenv
 pytest
 fastapi

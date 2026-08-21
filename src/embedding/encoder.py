@@ -1,9 +1,10 @@
-"""Embeds conversation text via Gemini's embedding API.
+"""Embeds conversation text via SiliconFlow's embedding API.
 
 Used to run a local sentence-transformers model here, but its weights alone (~470MB in fp32)
-left no headroom in Render's 512MB free-tier memory limit. Calling Gemini's embedding API
+left no headroom in Render's 512MB free-tier memory limit. Calling a hosted embedding API
 instead trades local compute for a network call, which the pipeline already depends on for
-cluster naming and highlights anyway.
+cluster naming and highlights anyway. (Originally Gemini's API; moved to SiliconFlow's
+BAAI/bge-m3 after Gemini's access policy changed.)
 """
 
 import sys
@@ -14,17 +15,22 @@ import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 from config import EMBEDDING_DIR, EMBEDDING_MODEL  # noqa: E402
-from src.llm.gemini_client import embed_texts  # noqa: E402
+from src.llm.siliconflow_client import embed_texts  # noqa: E402
 
-_BATCH_SIZE = 100  # conservative batch size — the API's per-request limit isn't publicly pinned down
-_OUTPUT_DIM = 768  # gemini-embedding-001 defaults to 3072-dim; 768 is plenty for KMeans on a personal-size corpus
+_BATCH_SIZE = 32  # conservative: the API caps both items and total tokens per request
+# bge-m3 accepts 8192 tokens per input and rejects (400) anything longer, which would kill a whole
+# report build. A joined conversation can easily run past that, so cut it here — Chinese is roughly
+# one token per character, the worst case, so 6000 chars stays inside the limit either way.
+# The opening of a conversation carries the topic, which is all the clustering downstream needs.
+_MAX_DOC_CHARS = 6000
 
 
 def encode_texts(texts: list[str], model_name: str = EMBEDDING_MODEL) -> np.ndarray:
+    texts = [t[:_MAX_DOC_CHARS] for t in texts]
     vectors: list[list[float]] = []
     for i in range(0, len(texts), _BATCH_SIZE):
         batch = texts[i : i + _BATCH_SIZE]
-        vectors.extend(embed_texts(batch, model=model_name, output_dimensionality=_OUTPUT_DIM))
+        vectors.extend(embed_texts(batch, model=model_name))
 
     arr = np.array(vectors, dtype=np.float32)
     # L2-normalize so KMeans' Euclidean distance behaves like cosine similarity,

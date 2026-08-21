@@ -17,7 +17,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from src.analysis import usage_profile as up  # noqa: E402
 from src.clustering import topic_model as tm  # noqa: E402
 from src.embedding import encoder  # noqa: E402
-from src.llm.gemini_client import label_cluster, summarize_highlight  # noqa: E402
+from src.llm.siliconflow_client import label_cluster, summarize_highlight  # noqa: E402
 from src.parsing.chatgpt_parser import parse_exports  # noqa: E402
 from src.utils.memlog import log_rss  # noqa: E402
 
@@ -30,7 +30,7 @@ _STEPS = {
         "profile": "计算使用画像统计",
         "embed": "生成对话向量",
         "cluster": "聚类话题",
-        "label": "用 Gemini 给话题簇命名",
+        "label": "用大模型给话题簇命名",
         "monthly_share": "计算月度话题占比",
         "highlights": "生成每月高光小结",
         "done": "完成",
@@ -41,7 +41,7 @@ _STEPS = {
         "profile": "Computing usage profile stats",
         "embed": "Embedding conversations",
         "cluster": "Clustering topics",
-        "label": "Naming topic clusters with Gemini",
+        "label": "Naming topic clusters with an LLM",
         "monthly_share": "Computing monthly topic share",
         "highlights": "Writing monthly highlights",
         "done": "Done",
