@@ -6,7 +6,7 @@ import BackgroundBubbles from "./components/BackgroundBubbles";
 import LanguageToggle from "./components/LanguageToggle";
 import Game2048 from "./components/Game2048";
 import ReportView from "./components/ReportView";
-import { uploadExports, getJobStatus, type ReportResult } from "./api";
+import { uploadExports, getJobStatus, fetchDemoReport, type ReportResult } from "./api";
 import { useLanguage } from "./i18n/LanguageContext";
 
 type Phase = "idle" | "running" | "done" | "error";
@@ -50,6 +50,7 @@ function App() {
   const [showPrivacyNotice, setShowPrivacyNotice] = useState(true);
   const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [showReport, setShowReport] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -91,6 +92,23 @@ function App() {
     }
   }
 
+  // The sample skips upload/polling entirely and drops straight into the same "done" state a real
+  // run ends in, so ReportView renders it through exactly the same path -- no demo-only branch.
+  async function handleShowDemo() {
+    setDemoLoading(true);
+    setError(null);
+    try {
+      setReport(await fetchDemoReport(lang));
+      setPhase("done");
+      setShowReport(true);
+    } catch {
+      setError(t.demo.error);
+      setPhase("error");
+    } finally {
+      setDemoLoading(false);
+    }
+  }
+
   return (
     <div className="relative flex min-h-screen w-full flex-col items-center gap-6 overflow-hidden bg-gradient-to-t from-violet-600/40 via-[#1a1430] to-[#0b0b12] px-4 py-12">
       <BackgroundBubbles />
@@ -123,7 +141,17 @@ function App() {
 
         {phase === "idle" && (
           <div className="flex flex-col items-center gap-10">
-            <UploadDropzone onFilesSelected={handleFiles} />
+            <div className="flex w-full max-w-xl flex-col items-center gap-4">
+              <UploadDropzone onFilesSelected={handleFiles} />
+              <button
+                type="button"
+                onClick={handleShowDemo}
+                disabled={demoLoading}
+                className="text-sm text-violet-300/80 underline underline-offset-4 transition-colors hover:text-violet-200 disabled:cursor-wait disabled:text-white/40"
+              >
+                {demoLoading ? t.demo.loading : t.demo.link}
+              </button>
+            </div>
             <ExportGuide />
           </div>
         )}

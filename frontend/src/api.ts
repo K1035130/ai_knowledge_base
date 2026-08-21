@@ -35,7 +35,10 @@ export interface ReportResult {
     user_abandoned_versions: number;
     assistant_regen_turns: number;
     assistant_abandoned_versions: number;
-    most_edited: { conversation_id: string; role: string; edit_count: number; text: string }[];
+    // Verbatim message text. Nothing renders it today, and the static sample report strips it
+    // rather than expose real conversation text in a publicly readable file -- so treat it as
+    // optional and never assume it is there.
+    most_edited?: { conversation_id: string; role: string; edit_count: number; text: string }[];
   };
   clusters: ClusterInfo[];
   monthly_topic_share: Record<string, Record<string, number>>;
@@ -69,6 +72,21 @@ export async function uploadExports(files: File[], lang: "zh" | "en", timezone: 
   }
   const data = await res.json();
   return data.job_id as string;
+}
+
+/**
+ * Loads the pre-generated sample report shipped as a static file alongside the frontend.
+ *
+ * Deliberately not routed through API_BASE: this is served from the same origin as the app
+ * (S3/CloudFront), so the sample stays clickable even while the backend EC2 instance is asleep --
+ * which is the whole point of having one. BASE_URL keeps it correct under a non-root base path.
+ */
+export async function fetchDemoReport(lang: "zh" | "en"): Promise<ReportResult> {
+  const res = await fetch(`${import.meta.env.BASE_URL}demo-report.${lang}.json`);
+  if (!res.ok) {
+    throw new Error(`Demo report unavailable: ${res.status}`);
+  }
+  return (await res.json()) as ReportResult;
 }
 
 export async function getJobStatus(jobId: string): Promise<JobStatus> {

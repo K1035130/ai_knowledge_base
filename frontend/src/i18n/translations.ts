@@ -28,6 +28,11 @@ export const translations = {
     errorPrefix: "出错了：",
     retry: "重试",
     reupload: "上传新的导出文件",
+    demo: {
+      link: "没有导出文件？看一份示例报告",
+      loading: "正在打开示例报告…",
+      error: "示例报告加载失败，请重试",
+    },
     sections: {
       overview: "总览",
       activity: "什么时候在用 AI",
@@ -102,6 +107,11 @@ export const translations = {
     errorPrefix: "Something went wrong: ",
     retry: "Retry",
     reupload: "Upload a new export",
+    demo: {
+      link: "No export handy? See a sample report",
+      loading: "Opening the sample report…",
+      error: "Could not load the sample report — please try again",
+    },
     sections: {
       overview: "Overview",
       activity: "When you use AI",
